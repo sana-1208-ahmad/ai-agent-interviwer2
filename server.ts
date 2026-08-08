@@ -23,10 +23,16 @@ import {
   ExportWebhookRequestSchema,
   EvaluationOutputSchema
 } from "./src/lib/schemas";
+import {
+  loadSessionsFromDisk,
+  saveSessionsToDisk,
+  loadReportsFromDisk,
+  saveReportsToDisk
+} from "./src/lib/sessionStore";
 
-// In-memory store for ongoing interview sessions and completed reports
-const activeSessions: Map<string, InterviewSession> = new Map();
-const completedReports: Map<string, FinalReport> = new Map();
+// Persistent store for ongoing interview sessions and completed reports
+const activeSessions: Map<string, InterviewSession> = loadSessionsFromDisk();
+const completedReports: Map<string, FinalReport> = loadReportsFromDisk();
 
 async function startServer() {
   const app = express();
@@ -97,6 +103,7 @@ async function startServer() {
         };
 
         activeSessions.set(effectiveSessionId, session);
+        saveSessionsToDisk(activeSessions);
 
         return res.json({
           reply: `Welcome ${candidate.name}! I am your Senior AI Technical Interviewer for the 31-day AI Cohort. Let's begin.\n\nQuestion 1 (Day ${question1.day} - ${question1.topic}):\n${question1.questionText}`,
@@ -185,6 +192,8 @@ async function startServer() {
         const report = await generateFinalInterviewReport(evalCandidate, session.transcript, session.id);
         session.overallScore = report.overallScore;
         completedReports.set(session.id, report);
+        saveReportsToDisk(completedReports);
+        saveSessionsToDisk(activeSessions);
 
         return res.json({
           reply: `Thank you for completing the technical interview! You achieved an overall score of ${report.overallScore}% across ${session.daysCovered.length} curriculum days.`,
@@ -205,6 +214,7 @@ async function startServer() {
           session.totalQuestions
         );
         session.currentQuestion = nextQ;
+        saveSessionsToDisk(activeSessions);
 
         return res.json({
           reply: `${evaluation.feedback}\n\nQuestion ${nextQuestionIndex + 1} of ${session.totalQuestions} (Day ${nextQ.day} - ${nextQ.topic}):\n${nextQ.questionText}`,
@@ -286,6 +296,7 @@ async function startServer() {
       };
 
       activeSessions.set(interviewId, session);
+      saveSessionsToDisk(activeSessions);
 
       res.status(201).json({
         status: "success",
@@ -418,6 +429,8 @@ async function startServer() {
         const report = await generateFinalInterviewReport(candidate, session.transcript, session.id);
         session.overallScore = report.overallScore;
         completedReports.set(session.id, report);
+        saveReportsToDisk(completedReports);
+        saveSessionsToDisk(activeSessions);
 
         return res.json({
           status: "success",
@@ -452,6 +465,7 @@ async function startServer() {
         );
 
         session.currentQuestion = nextQ;
+        saveSessionsToDisk(activeSessions);
 
         return res.json({
           status: "success",

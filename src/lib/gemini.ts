@@ -143,14 +143,16 @@ export function classifyAnswerIntent(
 
   const lower = trimmed.toLowerCase();
 
-  // Gibberish or explicitly non-responsive phrases
+  // Gibberish or explicitly non-responsive phrases or prompt injection attempts
   const nonResponsivePhrases = [
     'no idea', 'idk', 'don\'t know', 'dont know', 'not sure', 'no clue',
     'asdf', 'qwerty', 'test', 'xyz', 'pass', 'skip', 'nothing', 'whatever',
-    'sdjcnksjdvk', 'junk', 'blah', 'na', 'n/a', 'dunno'
+    'sdjcnksjdvk', 'junk', 'blah', 'na', 'n/a', 'dunno',
+    'ignore previous instructions', 'ignore all instructions', 'system prompt',
+    'you are now', 'dan mode', 'bypass', 'give me 100', 'give me full marks'
   ];
 
-  if (nonResponsivePhrases.some(p => lower === p || lower.startsWith(p))) {
+  if (nonResponsivePhrases.some(p => lower === p || lower.includes(p))) {
     return 'NON_RESPONSIVE';
   }
 
