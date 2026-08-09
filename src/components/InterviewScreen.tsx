@@ -418,13 +418,24 @@ export const InterviewScreen: React.FC<InterviewScreenProps> = ({
               <span className="text-base font-extrabold dark:text-white text-slate-900">
                 Enterprise AI Technical Interview
               </span>
-              <span className="px-3 py-1 rounded-full dark:bg-blue-500/20 bg-blue-100 dark:text-blue-300 text-blue-800 dark:border-blue-500/30 border-blue-200 border text-xs font-black shadow-sm">
-                Question {currentQNum} of {session.totalQuestions}
+              <span className={`px-3 py-1 rounded-full border text-xs font-black shadow-sm flex items-center gap-1.5 ${
+                session.transcript.length >= 8
+                  ? 'dark:bg-emerald-500/20 bg-emerald-100 dark:text-emerald-300 text-emerald-800 dark:border-emerald-500/30 border-emerald-300'
+                  : 'dark:bg-blue-500/20 bg-blue-100 dark:text-blue-300 text-blue-800 dark:border-blue-500/30 border-blue-200'
+              }`}>
+                Questions Asked: {session.transcript.length} / 8 (Min Required: 8)
+              </span>
+              <span className={`px-3 py-1 rounded-full border text-xs font-black shadow-sm flex items-center gap-1.5 ${
+                session.daysCovered.length >= 4
+                  ? 'dark:bg-emerald-500/20 bg-emerald-100 dark:text-emerald-300 text-emerald-800 dark:border-emerald-500/30 border-emerald-300'
+                  : 'dark:bg-amber-500/20 bg-amber-100 dark:text-amber-300 text-amber-800 dark:border-amber-500/30 border-amber-200'
+              }`}>
+                Curriculum Days Covered: {session.daysCovered.length} / 4 (Min Required: 4)
               </span>
               {currentQ && (
                 <span className="px-3 py-1 rounded-full bg-gradient-to-r from-purple-500/20 to-indigo-500/20 dark:text-purple-300 text-purple-800 dark:border-purple-500/40 border-purple-300 border text-xs font-black shadow-sm flex items-center gap-1.5">
                   <Sparkles className="w-3.5 h-3.5 text-purple-500 animate-spin" />
-                  Assessing Day {currentQ.day}: {currentQ.topic}
+                  Currently Assessing: Day {currentQ.day} - {currentQ.topic}
                 </span>
               )}
             </div>
@@ -444,10 +455,18 @@ export const InterviewScreen: React.FC<InterviewScreenProps> = ({
           {/* End & Generate Feedback Button */}
           <button
             onClick={handleEndAttempt}
-            className="flex items-center gap-1.5 px-4 py-2 rounded-xl bg-gradient-to-r from-rose-500 to-red-600 text-white font-bold text-xs shadow-lg shadow-rose-500/20 hover:shadow-rose-500/40 hover:scale-[1.02] active:scale-[0.98] transition-all cursor-pointer"
+            className={`flex items-center gap-1.5 px-4 py-2 rounded-xl font-bold text-xs shadow-lg transition-all cursor-pointer ${
+              session.transcript.length >= 8 && session.daysCovered.length >= 4
+                ? 'bg-gradient-to-r from-emerald-500 to-teal-600 text-white shadow-emerald-500/20 hover:shadow-emerald-500/40 hover:scale-[1.02]'
+                : 'bg-gradient-to-r from-rose-500 to-red-600 text-white shadow-rose-500/20 hover:shadow-rose-500/40 hover:scale-[1.02]'
+            }`}
           >
             <LogOut className="w-3.5 h-3.5" />
-            <span>End &amp; Generate Feedback</span>
+            <span>
+              {session.transcript.length >= 8 && session.daysCovered.length >= 4
+                ? 'Finish Interview & Generate Report ✓'
+                : 'End & Generate Feedback'}
+            </span>
           </button>
         </div>
       </div>
