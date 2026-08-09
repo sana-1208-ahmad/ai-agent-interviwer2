@@ -226,20 +226,22 @@ HUMAN SENIOR INTERVIEWER EVALUATION DIRECTIVES:
    - "NON_RESPONSIVE": Gibberish (e.g. "sdjcnksjdvk", "asdf"), empty, "no idea", "idk", or random text that does not attempt to answer the question.
    - "INCORRECT": Candidate attempted a technical answer, but it is fundamentally wrong, off-target, or fails the core technical concept.
    - "PARTIALLY_CORRECT": Candidate got some key points right, but missed essential aspects or trade-offs.
-   - "CORRECT": Candidate gave a accurate, technically sound answer covering key points.
+   - "CORRECT": Candidate gave an accurate, technically sound answer covering key points.
 
-2. HUMAN CONVERSATIONAL FEEDBACK STRUCTURE (DO NOT USE ROBOTIC JARGON):
-   Construct your feedback text using the voice of a direct, constructive senior engineer:
+2. HUMAN CONVERSATIONAL FEEDBACK STRUCTURE & MICROCOPY (DO NOT USE ROBOTIC JARGON):
+   Construct your feedback text using the voice of a direct, constructive senior engineer. Use natural conversational transitions like "Let's stay with this topic for a moment", "You're on the right track", "There's an important distinction missing here", "Let's revisit that concept", or "Great recovery".
+   STRICT RULE: NEVER use robotic phrases such as "Score penalty applied", "Branching algorithm triggered", "Evaluation node activated", or "Incorrect concept detected".
+   
    - For NON_RESPONSIVE:
-     "That response doesn't address the question, so I can't give you credit for this answer. The question was testing [what the question tested]. A strong answer would discuss [1-2 key points]. This is an area I'd recommend revising. Before we move on, let's try it again from a simpler angle."
+     "That response doesn't address the question, so I can't give you credit for this answer. The question was testing [what the question tested]. A strong answer would discuss [1-2 key points]. Let me ask a simpler question so we can revisit that concept."
    - For INCORRECT:
-     "That's not quite correct. The issue is that the answer doesn't address [specific missing technical aspect]. A key idea here is that [1-2 sentence core conceptual guidance without giving away the complete benchmark solution]. This is an area I'd recommend revising. Let's try again with a simpler question on this topic."
+     "That's not quite correct. The issue is that the answer doesn't address [specific missing technical aspect]. A key idea here is that [1-2 sentence core conceptual guidance without giving away the complete benchmark solution]. Let's stay with this topic for a moment and try a follow-up question."
    - For PARTIALLY_CORRECT:
-     "You're on the right track, but you're missing an important piece. Your answer correctly addresses [covered points], but you haven't explained [missing points]. Before moving on, let's clarify that missing piece."
+     "You're on the right track, but you're missing an important piece. Your answer correctly addresses [covered points], but you haven't explained [missing points]. Let's stay with this topic for a moment to clarify that missing piece."
    - For CORRECT (If candidate previously failed this topic, acknowledge recovery):
      ${wasPreviousAttemptWeak
-       ? '"Much better! That\'s the key idea I was looking for. You correctly identified [key points]. Great recovery."'
-       : '"That\'s correct. You clearly identified [key points]."'}
+       ? '"Much better! That\'s the key idea I was looking for. You correctly identified [key points]. Great recovery. Let\'s build on that."'
+       : '"That\'s a strong answer. You clearly identified [key points]. Let\'s go one level deeper."'}
 
 3. IMPORTANT: DO NOT GIVE AWAY THE COMPLETE SOLUTION BEFORE THE FOLLOW-UP.
    Provide enough conceptual guidance to teach what was missed, but do NOT print out the complete benchmark solution or code snippet.
@@ -630,17 +632,51 @@ export async function generateFinalInterviewReport(
 
   const daysEvaluated = Array.from(new Set(transcript.map(q => q.day)));
 
+  // Analyze transcript for evidence-linked feedback in fallback & prompt
+  const strongTurns = transcript.filter(t => t.score >= 75);
+  const weakTurns = transcript.filter(t => t.score < 75);
+  const followUpTurns = transcript.filter(t => t.followUpTriggered);
+
+  // Compute category scores based on transcript turn types
+  const conceptualTurns = transcript.filter(t => t.type === 'Conceptual');
+  const systemDesignTurns = transcript.filter(t => t.type === 'System Design');
+  const practicalTurns = transcript.filter(t => t.type === 'Coding' || t.type === 'Practical');
+
+  const calcAvgScore = (turns: QuestionAnswerRecord[], fallback: number) => {
+    if (turns.length === 0) return fallback;
+    return Math.round(turns.reduce((sum, t) => sum + t.score, 0) / turns.length);
+  };
+
+  const computedTechKnowledge = calcAvgScore(transcript, overallAvg);
+  const computedConceptual = calcAvgScore(conceptualTurns, overallAvg);
+  const computedSystemDesign = calcAvgScore(systemDesignTurns, Math.max(50, overallAvg - 5));
+  const computedProblemSolving = calcAvgScore(practicalTurns, Math.max(55, overallAvg - 3));
+  const computedComm = Math.min(100, Math.max(50, overallAvg + (weakTurns.length === 0 ? 5 : -2)));
+
   const ai = getAiClient();
   if (ai) {
     try {
       const prompt = `You are the Lead AI Interview Examiner at ABTalks AI Cohort.
 Synthesize the final technical interview report for candidate ${candidate.name} after an 8+ question adaptive interview covering Days: ${daysEvaluated.join(', ')}.
 
-Transcript Summary:
-${transcript.map((t, idx) => `Q${idx + 1} (Day ${t.day} - ${t.topic}) [${t.difficulty}]: Score ${t.score}% (${t.evaluationLabel})
-Answer: "${t.candidateAnswer.substring(0, 150)}..."`).join('\n')}
+DETAILED INTERVIEW TRANSCRIPT WITH TURN EVIDENCE:
+${transcript.map((t, idx) => `Turn ${idx + 1} (Day ${t.day} - ${t.topic}) [${t.type} / ${t.difficulty}]:
+  Score: ${t.score}% (${t.evaluationLabel})
+  Question: "${t.questionText}"
+  Candidate Answer: "${t.candidateAnswer.substring(0, 200)}..."
+  Interviewer Feedback: "${t.feedback}"
+  Key Points Covered: ${t.idealKeyPointsCovered?.join(', ') || 'None'}
+  Key Points Missed: ${t.idealKeyPointsMissed?.join(', ') || 'None'}
+  Follow-up Triggered: ${t.followUpTriggered ? 'Yes' : 'No'}`).join('\n\n')}
 
-Generate a comprehensive final report JSON adhering strictly to this schema:
+STRICT REPORT SYNTHESIS DIRECTIVES:
+1. LINK SCORES TO EVIDENCE: Ensure the breakdown scores reflect the candidate's actual answers across question types (Conceptual, System Design, Practical) and follow-up turns.
+2. STRENGTHS: Provide 3 bullet points explicitly referencing specific turns, curriculum days, and topics where the candidate performed strongly (e.g. "Turn X / Day Y: [Topic]").
+3. AREAS TO IMPROVE: Provide 3 bullet points explicitly citing specific turns/topics where concepts were missed or follow-up probes were triggered.
+4. RECOMMENDED ACTION PLAN: Provide 3 concrete, actionable learning steps explicitly naming curriculum Days and topics (e.g. "Review Day X: [Topic] to master [Specific missed concept]").
+5. SUMMARY PARAGRAPH: Write a 3-4 sentence professional executive summary connecting performance evidence across the evaluated curriculum days (${daysEvaluated.join(', ')}).
+
+Generate a final report JSON adhering strictly to this schema:
 {
   "gradeLabel": "Mastery" or "Excellent" or "Competent" or "Needs Revision",
   "technicalKnowledge": integer 0-100,
@@ -648,10 +684,10 @@ Generate a comprehensive final report JSON adhering strictly to this schema:
   "problemSolving": integer 0-100,
   "systemDesign": integer 0-100,
   "communication": integer 0-100,
-  "strengths": ["bullet point 1", "bullet point 2", "bullet point 3"],
-  "areasToImprove": ["bullet point 1", "bullet point 2", "bullet point 3"],
-  "recommendedActionPlan": ["step 1", "step 2", "step 3"],
-  "summaryParagraph": "A 3-4 sentence professional executive summary of candidate readiness for Enterprise AI Engineer roles."
+  "strengths": ["bullet 1 citing Turn/Day evidence", "bullet 2", "bullet 3"],
+  "areasToImprove": ["bullet 1 citing Turn/Day evidence", "bullet 2", "bullet 3"],
+  "recommendedActionPlan": ["step 1 referencing Day X", "step 2 referencing Day Y", "step 3"],
+  "summaryParagraph": "Executive summary paragraph"
 }`;
 
       const response = await generateContentWithRetry(ai, {
@@ -688,23 +724,23 @@ Generate a comprehensive final report JSON adhering strictly to this schema:
           overallScore: overallAvg,
           gradeLabel: (['Mastery', 'Excellent', 'Competent', 'Needs Revision'].includes(parsed.gradeLabel) ? parsed.gradeLabel : overallAvg >= 85 ? 'Excellent' : 'Competent') as any,
           scoreBreakdown: {
-            technicalKnowledge: parsed.technicalKnowledge || Math.min(100, overallAvg + 3),
-            conceptualUnderstanding: parsed.conceptualUnderstanding || overallAvg,
-            problemSolving: parsed.problemSolving || Math.max(50, overallAvg - 2),
-            systemDesign: parsed.systemDesign || Math.max(50, overallAvg - 5),
-            communication: parsed.communication || Math.min(100, overallAvg + 5)
+            technicalKnowledge: parsed.technicalKnowledge || computedTechKnowledge,
+            conceptualUnderstanding: parsed.conceptualUnderstanding || computedConceptual,
+            problemSolving: parsed.problemSolving || computedProblemSolving,
+            systemDesign: parsed.systemDesign || computedSystemDesign,
+            communication: parsed.communication || computedComm
           },
           strengths: parsed.strengths || candidate.strengths,
           areasToImprove: parsed.areasToImprove || candidate.areasToImprove,
           recommendedActionPlan: parsed.recommendedActionPlan || [
-            "Review Day 10 Hybrid Search & RRF score fusion mathematics",
-            "Build a custom FastMCP server with bearer authorization middleware",
-            "Implement production LangSmith tracing to measure TTFT and token cost"
+            `Review Day ${daysEvaluated[0] || 10}: Architecture and trade-off optimization`,
+            `Build a production service applying authorization and error recovery`,
+            `Practice evaluation metrics and benchmarking across cohort days`
           ],
           questionPerformance: transcript,
           daysEvaluated,
           visited_curriculum_days: daysEvaluated,
-          summaryParagraph: parsed.summaryParagraph || `${candidate.name} demonstrated strong technical knowledge across ${daysEvaluated.length} curriculum days with an overall score of ${overallAvg}%.`
+          summaryParagraph: parsed.summaryParagraph || `${candidate.name} demonstrated technical knowledge across ${daysEvaluated.length} curriculum days (Days ${daysEvaluated.join(', ')}) with an overall score of ${overallAvg}%.`
         };
       }
     } catch (e) {
@@ -712,7 +748,36 @@ Generate a comprehensive final report JSON adhering strictly to this schema:
     }
   }
 
-  // Fallback heuristic report generator
+  // Dynamic evidence-linked fallback report generator
+  const dynamicStrengths = strongTurns.length > 0
+    ? strongTurns.slice(0, 3).map(t =>
+        `Turn Q${t.questionNumber} (Day ${t.day} - ${t.topic}): Demonstrated strong performance (${t.score}%) covering ${t.idealKeyPointsCovered?.length ? t.idealKeyPointsCovered.slice(0, 2).join(' and ') : 'key concepts'}.`
+      )
+    : [
+        `Demonstrated foundational understanding of Day ${daysEvaluated[0] || 1} topics`,
+        "Maintained structured approach during multi-turn technical questions",
+        "Engaged constructively with interviewer follow-up prompts"
+      ];
+
+  const dynamicAreasToImprove = weakTurns.length > 0
+    ? weakTurns.slice(0, 3).map(t =>
+        `Turn Q${t.questionNumber} (Day ${t.day} - ${t.topic}): Missed core concepts (${t.idealKeyPointsMissed?.length ? t.idealKeyPointsMissed.slice(0, 2).join(', ') : 'technical details'}), scoring ${t.score}%.`
+      )
+    : [
+        `Deeper mathematical and production trade-off mastery on Day ${daysEvaluated[daysEvaluated.length - 1] || 24}`,
+        "Elaborate more on error handling, edge cases, and latency optimizations in system design responses"
+      ];
+
+  const dynamicActionPlan = weakTurns.length > 0
+    ? weakTurns.slice(0, 3).map(t =>
+        `Review Day ${t.day} (${t.topic}): Focus on ${t.idealKeyPointsMissed?.length ? t.idealKeyPointsMissed[0] : 'core architecture'} and review implementation guidelines.`
+      )
+    : [
+        `Review Day ${daysEvaluated[0] || 10} advanced patterns and benchmark metrics`,
+        "Build a hands-on project incorporating secure authorization and production monitoring",
+        "Practice trade-off analysis under high-concurrency production scenarios"
+      ];
+
   return {
     interviewId,
     candidateName: candidate.name,
@@ -720,29 +785,19 @@ Generate a comprehensive final report JSON adhering strictly to this schema:
     overallScore: overallAvg,
     gradeLabel: overallAvg >= 90 ? 'Mastery' : overallAvg >= 80 ? 'Excellent' : overallAvg >= 65 ? 'Competent' : 'Needs Revision',
     scoreBreakdown: {
-      technicalKnowledge: Math.min(98, overallAvg + 3),
-      conceptualUnderstanding: overallAvg,
-      problemSolving: Math.max(55, overallAvg - 3),
-      systemDesign: Math.max(50, overallAvg - 5),
-      communication: Math.min(95, overallAvg + 5)
+      technicalKnowledge: computedTechKnowledge,
+      conceptualUnderstanding: computedConceptual,
+      problemSolving: computedProblemSolving,
+      systemDesign: computedSystemDesign,
+      communication: computedComm
     },
-    strengths: [
-      `Strong foundational comprehension of Day ${daysEvaluated[0] || 1} topics`,
-      "Clear, structured technical communication style",
-      "Good awareness of practical implementation constraints"
-    ],
-    areasToImprove: [
-      "Deeper mathematical mastery of vector similarity indices",
-      "Production security and authorization policies in MCP servers"
-    ],
-    recommendedActionPlan: [
-      "Practice multi-agent graph architecture with LangGraph",
-      "Review RAG Triad faithfulness metrics and evaluation guardrails"
-    ],
+    strengths: dynamicStrengths,
+    areasToImprove: dynamicAreasToImprove,
+    recommendedActionPlan: dynamicActionPlan,
     questionPerformance: transcript,
     daysEvaluated,
     visited_curriculum_days: daysEvaluated,
-    summaryParagraph: `${candidate.name} completed a multi-turn technical interview across ${daysEvaluated.length} curriculum days (Days ${daysEvaluated.join(', ')}). Overall performance was rated at ${overallAvg}%, showing solid technical proficiency in AI engineering concepts.`
+    summaryParagraph: `${candidate.name} completed a multi-turn technical interview across ${daysEvaluated.length} curriculum days (Days ${daysEvaluated.join(', ')}). Overall score: ${overallAvg}%, with ${strongTurns.length} strong answers and ${followUpTurns.length} adaptive follow-up turns evaluated.`
   };
 }
 
